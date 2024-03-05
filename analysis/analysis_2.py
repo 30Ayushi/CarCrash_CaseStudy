@@ -41,9 +41,8 @@ class Analysis2:
         two_wheelers_df = units_df.filter(f.col("VEH_BODY_STYL_ID") == "MOTORCYCLE")
 
         # Count the distinct crashes involving two-wheelers
-        crash_count = two_wheelers_df.select("CRASH_ID").distinct().count()
-        count_df = self.spark.createDataFrame([Row(count=crash_count)])
-
-        logger.info("Write analayis2 under %s ", self.output_path)
+        crash_count = two_wheelers_df.select(f.countDistinct("CRASH_ID").alias("CRASH_COUNT"))
+        
+        logger.info("Write the Output of analayis2 under %s ", self.output_path + "analysis2")
         count_df.coalesce(1).write.mode('overwrite').option("header", "true").csv(self.output_path + "analysis2")
-        return count_df
+        return crash_count
