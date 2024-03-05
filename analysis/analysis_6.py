@@ -1,5 +1,6 @@
 import logging
 import pyspark.sql.functions as f
+from pyspark.sql.window import Window
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -53,7 +54,7 @@ class Analysis6:
 
         logger.info("Apply Rank on total of death and injury")
         windowSpec = Window.orderBy(f.col("SUM_INJRY_DEATH").desc())
-        rank_df = injuries_df.withColumn("rank", dense_rank().over(windowSpec))
+        rank_df = injuries_df.withColumn("rank", f.dense_rank().over(windowSpec))
 
         logger.info("Filter the records for 3rd to 5th rank")
         final_df = rank_df.filter((f.col("rank") >= 3) & (f.col("rank") <= 5))
