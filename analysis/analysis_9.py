@@ -1,6 +1,5 @@
 import logging
 import pyspark.sql.functions as f
-from pyspark.sql import Row
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
@@ -38,19 +37,19 @@ class Analysis9:
         """
         damages_df = self.data_dict['damages']
         units_df = self.data_dict['units']
-        
-        logger.info("Filter the non damage property from damages dateset")
-        non_damages_df = damages_df.filter(f.col("DAMAGED_PROPERTY").isNull()).select("CRASH_ID").distinct()
 
-        filtered_unit_df = units_df.filter((f.col("VEH_DMAG_SCL_1_ID").isin(["DAMAGED 5", "DAMAGED 6", "DAMAGED 7 HIGHEST"])) | 
-                                                                (f.col("VEH_DMAG_SCL_2_ID").isin(["DAMAGED 5", "DAMAGED 6", "DAMAGED 7 HIGHEST"])))\
-                                                        .filter(f.col("FIN_RESP_PROOF_ID").isNotNull())
+        filtered_unit_df = units_df.select("VEH_DMAG_SCL_1_ID", "VEH_DMAG_SCL_2_ID", "FIN_RESP_TYPE_ID", "FIN_RESP_PROOF_ID", "CRASH_ID")\
+                                    .withColumn('VEH_DMG_LVL_1',f.regexp_extract(f.col('VEH_DMAG_SCL_1_ID'), r'(\d+)', 1).cast('bigint'))\
+                                    .withColumn('VEH_DMG_LVL_2',f.regexp_extract(f.col('VEH_DMAG_SCL_2_ID'), r'(\d+)', 1).cast('bigint'))\
+                                    .filter((~f.col('FIN_RESP_PROOF_ID').isin('NA','NR')) & \
+                                            ((f.col('VEH_DMG_LVL_1') > 4) | (f.col('VEH_DMG_LVL_2') > 4)) & \
+                                            f.col('FIN_RESP_TYPE_ID').contains('INSURANCE'))
 
-        joined_df = non_damages_df.join(filtered_unit_df, "CRASH_ID", "inner")
+        non_damages_df = filtered_unit_df.join(damages_df, "CRASH_ID", "leftanti")
 
-        crash_count = joined_df.select("CRASH_ID").distinct().count()
-        count_df = self.spark.createDataFrame([Row(count=crash_count)])
+        final_dataset = non_damages_df.select(f.countDistinct(f.col('CRASH_ID')).alias('CRASH_ID_COUNT'))
 
         logger.info("Write the Output of Analysis9 under %s ", self.output_path + "analysis9")
-        count_df.coalesce(1).write.mode('overwrite').option("header", "true").csv(self.output_path + "analysis9")
-        return crash_count
+        final_dataset.coalesce(1).write.mode('overwrite').option("header", "true").csv(self.output_path + "analysis9")
+
+        return final_dataset
